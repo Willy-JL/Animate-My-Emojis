@@ -50,7 +50,7 @@ class AnimateMyEmojis(discord.Client):
             try:
                 global emojis_today
                 if message.content == f'<@!{self.user.id}>' or message.content == f'<@{self.user.id}>':
-                    await message.reply('', embed=embed(title='📩  Invite me to your server!', description=f'You can invite me to your own server with __**[this link](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)**__!', color=(114, 137, 218)))
+                    await message.reply('', embed=embed(title='📩  Invite me to your server!', description=f'You can **invite me** to __your__ server with __**[this link](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)**__!\n\nCoded with 💙 by [WillyJL#3633](https://github.com/Willy-JL/animate-my-emojis)', color=(93, 173, 236)))
                 elif (message.content.startswith(f'<@!{self.user.id}>') or message.content.startswith(f'<@{self.user.id}>')) and (message.content != f'<@!{self.user.id}>' and message.content != f'<@{self.user.id}>'):
                     if message.content.startswith(f'<@!{self.user.id}>'):
                         content = message.content[len(f'<@!{self.user.id}>'):]
@@ -192,7 +192,7 @@ class AnimateMyEmojis(discord.Client):
                             await message.add_reaction('👌')
                             if ignored_existing:
                                 await message.reply('', embed=embed(title='⚠️  Existing Emojis!',
-                                                                    description=f'The following emojis were ignored because they are from this server:\n**{"**,  **".join(ignored_existing)}**',
+                                                                    description=f'The following emojis were ignored because they are from this server:\n`{"`,  `".join(ignored_existing)}`',
                                                                     color=(255, 204, 77)))
                             if result:
                                 await message.reply(result)
