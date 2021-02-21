@@ -254,7 +254,7 @@ class AnimateMyEmojis(discord.Client):
                     pass
 
 
-@tasks.loop(seconds=20)
+@tasks.loop(seconds=15)
 async def update_presence_loop():
     global cur_presence
     if cur_presence == 0:
@@ -267,7 +267,7 @@ async def update_presence_loop():
         await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f'{count} users', start=start_datetime), status=discord.Status.dnd)
         cur_presence = 2
     elif cur_presence == 2:
-        await client.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f'{emojis_today} emojis today', start=start_datetime), status=discord.Status.dnd)
+        await client.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f'{emojis_today} emoji{"s" if emojis_today != 1 else ""} today', start=start_datetime), status=discord.Status.dnd)
         cur_presence = 0
 
 
