@@ -72,19 +72,21 @@ class AnimateMyEmojis(discord.Client):
                             link_results = list(dict.fromkeys(re.findall(link_regex, content)))
                             print(f"Yoinking {len(literal_results) + len(link_results)} emojis for @{message.author} in #{message.channel.name} at [{message.guild.name}]")
                             interrupted = False
+                            ignored_existing = []
                             warned_animated_slots = False
                             warned_static_slots = False
                             for literal_emoji in literal_results:
                                 if interrupted:
                                     break
                                 emoji_id = int(literal_emoji[literal_emoji.rfind(':') + 1:literal_emoji.rfind('>')])
+                                emoji_name = literal_emoji[literal_emoji.find(':') + 1:literal_emoji.rfind(':')].replace(' ', '')
                                 exists = False
                                 for existing_emoji in message.guild.emojis:
                                     if existing_emoji.id == emoji_id:
                                         exists = True
+                                        ignored_existing.append(emoji_name)
                                         break
                                 if not exists:
-                                    emoji_name = literal_emoji[literal_emoji.find(':') + 1:literal_emoji.rfind(':')].replace(' ', '')
                                     if literal_emoji[1] == 'a':
                                         if self.count_emojis(message.guild, True) >= message.guild.emoji_limit:
                                             if not warned_animated_slots:
@@ -135,10 +137,12 @@ class AnimateMyEmojis(discord.Client):
                                 if interrupted:
                                     break
                                 emoji_id = int(link_emoji[34:link_emoji.rfind(".")])
+                                emoji_name = str(emoji_id)
                                 exists = False
                                 for existing_emoji in message.guild.emojis:
                                     if existing_emoji.id == emoji_id:
                                         exists = True
+                                        ignored_existing.append(emoji_name)
                                         break
                                 if not exists:
                                     if link_emoji[-4:] == '.gif':
@@ -157,7 +161,6 @@ class AnimateMyEmojis(discord.Client):
                                                                                     color=(218, 45, 67)))
                                                 warned_static_slots = True
                                             continue
-                                    emoji_name = str(emoji_id)
                                     r = requests.get(link_emoji)
                                     try:
                                         new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
@@ -187,6 +190,10 @@ class AnimateMyEmojis(discord.Client):
                                                                                 description=f'⛔  Something went wrong!\n```{exc_msg}```',
                                                                                 color=(218, 45, 67)))
                             await message.add_reaction('👌')
+                            if ignored_existing:
+                                await message.reply('', embed=embed(title='⚠️  Existing Emojis!',
+                                                                    description=f'The following emojis were ignored because they are from this server:\n**{"**,  **".join(ignored_existing)}**',
+                                                                    color=(255, 204, 77)))
                             if result:
                                 await message.reply(result)
                 else:
