@@ -46,7 +46,9 @@ class AnimateMyEmojis(discord.Client):
         if message.guild:
             try:
                 global emojis_today
-                if (message.content.startswith(f'<@!{self.user.id}>') or message.content.startswith(f'<@{self.user.id}>')) and (message.content != f'<@!{self.user.id}>' and message.content != f'<@{self.user.id}>'):
+                if message.content == f'<@!{self.user.id}>' or message.content == f'<@{self.user.id}>':
+                    await message.reply('', embed=embed(title='📩  Invite me to your server!', description=f'You can invite me to your own server with __**[this link](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)**__!', color=(114, 137, 218)))
+                elif (message.content.startswith(f'<@!{self.user.id}>') or message.content.startswith(f'<@{self.user.id}>')) and (message.content != f'<@!{self.user.id}>' and message.content != f'<@{self.user.id}>'):
                     if not message.author.guild_permissions.manage_emojis:
                         await message.reply('', embed=embed(title='⛔  No Permission!', description=f'You need the **manage emojis** permission to do that!', color=(218, 45, 67)))
                     else:
