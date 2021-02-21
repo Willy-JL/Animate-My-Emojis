@@ -17,18 +17,21 @@ def embed(title, description, footer='AnimateMyEmojis', icon=discord.Embed.Empty
 
 class AnimateMyEmojis(discord.Client):
 
-    async def make_webhook(self, channel):
-        chan_webhooks = await channel.webhooks()
-        for chan_webhook in chan_webhooks:
-            if chan_webhook.user.id == self.user.id:
-                webhooks[channel.id] = chan_webhook
-                break
+    async def ensure_webhook(self, channel):
         try:
-            webhooks[channel.id]
+            webhook_cache[channel.id]
         except KeyError:
-            new_webhook = await channel.create_webhook(name='AnimateMyEmojis Webhook',
-                                                                reason=f'Webhook for replacing animated emojis, please do not delete!')
-            webhooks[channel.id] = new_webhook
+            chan_webhooks = await channel.webhooks()
+            for chan_webhook in chan_webhooks:
+                if chan_webhook.user.id == self.user.id:
+                    webhook_cache[channel.id] = chan_webhook
+                    break
+            try:
+                webhook_cache[channel.id]
+            except KeyError:
+                new_webhook = await channel.create_webhook(name='AnimateMyEmojis Webhook',
+                                                           reason=f'Webhook for replacing animated emojis, please do not delete!')
+                webhook_cache[channel.id] = new_webhook
 
     def count_emojis(self, guild, animated):
         count = 0
@@ -49,16 +52,20 @@ class AnimateMyEmojis(discord.Client):
                 if message.content == f'<@!{self.user.id}>' or message.content == f'<@{self.user.id}>':
                     await message.reply('', embed=embed(title='📩  Invite me to your server!', description=f'You can invite me to your own server with __**[this link](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)**__!', color=(114, 137, 218)))
                 elif (message.content.startswith(f'<@!{self.user.id}>') or message.content.startswith(f'<@{self.user.id}>')) and (message.content != f'<@!{self.user.id}>' and message.content != f'<@{self.user.id}>'):
-                    if not message.author.guild_permissions.manage_emojis:
-                        await message.reply('', embed=embed(title='⛔  No Permission!', description=f'You need the **manage emojis** permission to do that!', color=(218, 45, 67)))
-                    else:
-                        if message.content.startswith(f'<@!{self.user.id}>'):
-                            content = message.content[len(f'<@!{self.user.id}>'):]
-                        if message.content.startswith(f'<@{self.user.id}>'):
-                            content = message.content[len(f'<@{self.user.id}>'):]
-                        literal_regex = '<a?:[A-z 0-9]{2,33}:[0-9]{8,100}>'
-                        link_regex = 'https:\/\/cdn\.discordapp\.com\/emojis\/[0-9]{8,100}\.[A-z0-9]*'
-                        if re.search(literal_regex, content) or re.search(link_regex, content):
+                    if message.content.startswith(f'<@!{self.user.id}>'):
+                        content = message.content[len(f'<@!{self.user.id}>'):]
+                    if message.content.startswith(f'<@{self.user.id}>'):
+                        content = message.content[len(f'<@{self.user.id}>'):]
+                    literal_regex = '<a?:[A-z 0-9]{2,33}:[0-9]{8,100}>'
+                    link_regex = 'https:\/\/cdn\.discordapp\.com\/emojis\/[0-9]{8,100}\.[A-z0-9]*'
+                    if re.search(literal_regex, content) or re.search(link_regex, content):
+                        if not message.author.guild_permissions.manage_emojis:
+                            await message.reply('', embed=embed(title='⛔  No Permission!', description=f'You need the **manage emojis** permission to do that!', color=(218, 45, 67)))
+                        elif not message.channel.permissions_for(message.guild.me).manage_emojis:
+                            await message.reply('', embed=embed(title='',
+                                                                description=f'⛔  The bot doesn\'t have the **manage emojis** permission!',
+                                                                color=(218, 45, 67)))
+                        else:
                             await message.add_reaction('🔄')
                             result = ''
                             literal_results = list(dict.fromkeys(re.findall(literal_regex, content)))
@@ -115,7 +122,7 @@ class AnimateMyEmojis(discord.Client):
                                             await message.reply('', embed=embed(title='',
                                                                                 description=f'⛔  There are no more free emoji slots!',
                                                                                 color=(218, 45, 67)))
-                                        elif "larger" in exc_msg:
+                                        elif "large" in exc_msg:
                                             await message.reply('', embed=embed(title='',
                                                                                 description=f'⛔  Emoji \"**{emoji_name}**\" is larger than 256kb!',
                                                                                 color=(218, 45, 67)))
@@ -170,7 +177,7 @@ class AnimateMyEmojis(discord.Client):
                                             await message.reply('', embed=embed(title='',
                                                                                 description=f'⛔  There are no more free emoji slots!',
                                                                                 color=(218, 45, 67)))
-                                        elif "larger" in exc_msg:
+                                        elif "large" in exc_msg:
                                             await message.reply('', embed=embed(title='',
                                                                                 description=f'⛔  Emoji \"**{emoji_name}**\" is larger than 256kb!',
                                                                                 color=(218, 45, 67)))
@@ -196,40 +203,38 @@ class AnimateMyEmojis(discord.Client):
                                     emoji_count += 1
                         if emoji_count > 0:
                             print(f"Converting {emoji_count} emojis for @{message.author} in #{message.channel.name} at [{message.guild.name}]")
-                            try:
-                                webhooks[message.channel.id]
-                            except KeyError:
-                                await self.make_webhook(message.channel)
+                            await self.ensure_webhook(message.channel)
                             if message.reference:
                                 if isinstance(message.reference.resolved, discord.Message):
+                                    mention = f"\n<@!{message.reference.resolved.author.id}> "
                                     if "\n" in message.reference.resolved.content:
                                         reply = "> " + message.reference.resolved.content[:message.reference.resolved.content.find("\n")]
                                     else:
                                         reply = "> " + message.reference.resolved.content
-                                    if len(reply) > (2000 - len(msg)):
-                                        reply = reply[:(2000 - len(msg)) - 4] + "..."
-                                    msg = f"{reply}\n{msg}"
+                                    if len(reply) > (2000 - len(msg) - len(mention)):
+                                        reply = reply[:(2000 - len(msg)) - len(mention) - 4] + "..."
+                                    msg = reply + mention + msg
                             files = []
                             for attachment in message.attachments:
                                 binary = io.BytesIO()
                                 await attachment.save(binary)
                                 binary.seek(0)
                                 files.append(discord.File(binary, filename=attachment.filename,
-                                                            spoiler=attachment.is_spoiler()))
+                                                          spoiler=attachment.is_spoiler()))
                             try:
-                                await webhooks[message.channel.id].send(username=message.author.display_name,
-                                                                        avatar_url=message.author.avatar_url,
-                                                                        content=msg,
-                                                                        embeds=message.embeds,
-                                                                        files=files if files else None)
+                                await webhook_cache[message.channel.id].send(username=message.author.display_name,
+                                                                             avatar_url=message.author.avatar_url,
+                                                                             content=msg,
+                                                                             embeds=message.embeds,
+                                                                             files=files)
                             except NotFound:
-                                del webhooks[message.channel.id]
-                                await self.make_webhook(message.channel)
-                                await webhooks[message.channel.id].send(username=message.author.display_name,
-                                                                        avatar_url=message.author.avatar_url,
-                                                                        content=msg,
-                                                                        embeds=message.embeds,
-                                                                        files=files if files else None)
+                                del webhook_cache[message.channel.id]
+                                await self.ensure_webhook(message.channel)
+                                await webhook_cache[message.channel.id].send(username=message.author.display_name,
+                                                                             avatar_url=message.author.avatar_url,
+                                                                             content=msg,
+                                                                             embeds=message.embeds,
+                                                                             files=files)
                             emojis_today += emoji_count
                             try:
                                 await message.delete()
@@ -263,7 +268,7 @@ cur_presence = 0
 emojis_today = 0
 if __name__ == '__main__':
     start_datetime = datetime.datetime.now()
-    webhooks = {}
+    webhook_cache = {}
     client = AnimateMyEmojis()
     try:
         client.loop.run_until_complete(client.run(os.environ['token']))
