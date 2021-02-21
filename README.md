@@ -1,5 +1,5 @@
 # AnimateMyEmojis
-Simple and robust Discord bot to allow non Nitro users to use animated emojis and allow "yoinking" other servers' emojis
+Simple and robust Discord bot that allows non Nitro users to use animated emojis and features "yoinking" of other servers' emojis
 
 Code behind [`AnimateMyEmojis#7240`](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)
 
