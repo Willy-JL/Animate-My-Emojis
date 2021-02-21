@@ -1,9 +1,11 @@
 import re
 import os
+import io
 import discord
 import datetime
+import requests
 from discord.ext import tasks
-from discord import Forbidden, NotFound
+from discord import Forbidden, NotFound, HTTPException
 
 
 def embed(title, description, footer='AnimateMyEmojis', icon=discord.Embed.Empty, color=(32, 34, 37), color_obj=None):
@@ -28,6 +30,13 @@ class AnimateMyEmojis(discord.Client):
                                                                 reason=f'Webhook for replacing animated emojis, please do not delete!')
             webhooks[channel.id] = new_webhook
 
+    def count_emojis(self, guild, animated):
+        count = 0
+        for emoji in guild.emojis:
+            if emoji.animated == animated:
+                count += 1
+        return count
+
     async def on_ready(self):
         print('Logged in as {0}!'.format(self.user))
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f'discord open up', start=start_datetime), status=discord.Status.online)
@@ -36,36 +45,194 @@ class AnimateMyEmojis(discord.Client):
     async def on_message(self, message):
         if message.guild:
             try:
-                if isinstance(message.author, discord.Member) and not message.author.premium_since:
-                    msg = message.content
-                    emoji_count = 0
-                    for match in reversed(list(re.finditer(':\w{2,32}:', msg))):
-                        if not (msg[match.start() - 1] == '<' and match.start() > 0) and not (msg[match.start() - 2:match.start()] == '<a' and match.start() > 1):
-                            emoji_name = msg[match.start() + 1:match.end() - 1]
-                            new_emoji = discord.utils.get(message.guild.emojis, name=emoji_name)
-                            if new_emoji:
-                                new_emoji_text = f'<{"a" if new_emoji.animated else ""}:{new_emoji.name}:{new_emoji.id}>'
-                                msg = msg[:match.start()] + new_emoji_text + msg[match.end():]
-                                emoji_count += 1
-                    if emoji_count > 0:
-                        global emojis_today
-                        print(f"Converting {emoji_count} emojis for @{message.author} in #{message.channel.name} at [{message.guild.name}]")
-                        try:
-                            webhooks[message.channel.id]
-                        except KeyError:
-                            await self.make_webhook(message.channel)
-                        try:
-                            await webhooks[message.channel.id].send(username=message.author.display_name,
-                                                                    avatar_url=message.author.avatar_url,
-                                                                    content=msg)
-                        except NotFound:
-                            del webhooks[message.channel.id]
-                            await self.make_webhook(message.channel)
-                            await webhooks[message.channel.id].send(username=message.author.display_name,
-                                                                    avatar_url=message.author.avatar_url,
-                                                                    content=msg)
-                        emojis_today += emoji_count
-                        await message.delete()
+                global emojis_today
+                if (message.content.startswith(f'<@!{self.user.id}>') or message.content.startswith(f'<@{self.user.id}>')) and (message.content != f'<@!{self.user.id}>' and message.content != f'<@{self.user.id}>'):
+                    if not message.author.guild_permissions.manage_emojis:
+                        await message.reply('', embed=embed(title='⛔  No Permission!', description=f'You need the **manage emojis** permission to do that!', color=(218, 45, 67)))
+                    else:
+                        if message.content.startswith(f'<@!{self.user.id}>'):
+                            content = message.content[len(f'<@!{self.user.id}>'):]
+                        if message.content.startswith(f'<@{self.user.id}>'):
+                            content = message.content[len(f'<@{self.user.id}>'):]
+                        literal_regex = '<a?:[A-z 0-9]{2,33}:[0-9]{8,100}>'
+                        link_regex = 'https:\/\/cdn\.discordapp\.com\/emojis\/[0-9]{8,100}\.[A-z0-9]*'
+                        if re.search(literal_regex, content) or re.search(link_regex, content):
+                            await message.add_reaction('🔄')
+                            result = ''
+                            literal_results = list(dict.fromkeys(re.findall(literal_regex, content)))
+                            link_results = list(dict.fromkeys(re.findall(link_regex, content)))
+                            print(f"Yoinking {len(literal_results) + len(link_results)} emojis for @{message.author} in #{message.channel.name} at [{message.guild.name}]")
+                            interrupted = False
+                            warned_animated_slots = False
+                            warned_static_slots = False
+                            for literal_emoji in literal_results:
+                                if interrupted:
+                                    break
+                                emoji_id = int(literal_emoji[literal_emoji.rfind(':') + 1:literal_emoji.rfind('>')])
+                                exists = False
+                                for existing_emoji in message.guild.emojis:
+                                    if existing_emoji.id == emoji_id:
+                                        exists = True
+                                        break
+                                if not exists:
+                                    emoji_name = literal_emoji[literal_emoji.find(':') + 1:literal_emoji.rfind(':')].replace(' ', '')
+                                    if literal_emoji[1] == 'a':
+                                        if self.count_emojis(message.guild, True) >= message.guild.emoji_limit:
+                                            if not warned_animated_slots:
+                                                await message.reply('', embed=embed(title='',
+                                                                                    description=f'⛔  There are no more free animated emoji slots!',
+                                                                                    color=(218, 45, 67)))
+                                                warned_animated_slots = True
+                                            continue
+                                        file_name = f'{emoji_id}.gif'
+                                    else:
+                                        if self.count_emojis(message.guild, False) >= message.guild.emoji_limit:
+                                            if not warned_static_slots:
+                                                await message.reply('', embed=embed(title='',
+                                                                                    description=f'⛔  There are no more free static emoji slots!',
+                                                                                    color=(218, 45, 67)))
+                                                warned_static_slots = True
+                                            continue
+                                        file_name = f'{emoji_id}.png'
+                                    r = requests.get(f'https://cdn.discordapp.com/emojis/{file_name}')
+                                    try:
+                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
+                                        result += '<'
+                                        if new_emoji.animated:
+                                            result += 'a'
+                                        result += f':{new_emoji.name}:{new_emoji.id}> '
+                                        emojis_today += 1
+                                    except HTTPException as e:
+                                        exc_msg = str(e).lower()
+                                        if "missing permission" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  The bot doesn\'t have the **manage emojis** permission!',
+                                                                                color=(218, 45, 67)))
+                                            interrupted = True
+                                        elif "maximum number of emoji" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  There are no more free emoji slots!',
+                                                                                color=(218, 45, 67)))
+                                        elif "larger" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  Emoji \"**{emoji_name}**\" is larger than 256kb!',
+                                                                                color=(218, 45, 67)))
+                                        else:
+                                            print(exc_msg)
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  Something went wrong!\n```{exc_msg}```',
+                                                                                color=(218, 45, 67)))
+                            for link_emoji in link_results:
+                                if interrupted:
+                                    break
+                                emoji_id = int(link_emoji[34:link_emoji.rfind(".")])
+                                exists = False
+                                for existing_emoji in message.guild.emojis:
+                                    if existing_emoji.id == emoji_id:
+                                        exists = True
+                                        break
+                                if not exists:
+                                    if link_emoji[-4:] == '.gif':
+                                        if self.count_emojis(message.guild, True) >= message.guild.emoji_limit:
+                                            if not warned_animated_slots:
+                                                await message.reply('', embed=embed(title='',
+                                                                                    description=f'⛔  There are no more free animated emoji slots!',
+                                                                                    color=(218, 45, 67)))
+                                                warned_animated_slots = True
+                                            continue
+                                    else:
+                                        if self.count_emojis(message.guild, False) >= message.guild.emoji_limit:
+                                            if not warned_static_slots:
+                                                await message.reply('', embed=embed(title='',
+                                                                                    description=f'⛔  There are no more free static emoji slots!',
+                                                                                    color=(218, 45, 67)))
+                                                warned_static_slots = True
+                                            continue
+                                    emoji_name = str(emoji_id)
+                                    r = requests.get(link_emoji)
+                                    try:
+                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
+                                        result += '<'
+                                        if new_emoji.animated:
+                                            result += 'a'
+                                        result += f':{new_emoji.name}:{new_emoji.id}> '
+                                        emojis_today += 1
+                                    except HTTPException as e:
+                                        exc_msg = str(e).lower()
+                                        if "missing permission" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  The bot doesn\'t have the **manage emojis** permission!',
+                                                                                color=(218, 45, 67)))
+                                            interrupted = True
+                                        elif "maximum number of emoji" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  There are no more free emoji slots!',
+                                                                                color=(218, 45, 67)))
+                                        elif "larger" in exc_msg:
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  Emoji \"**{emoji_name}**\" is larger than 256kb!',
+                                                                                color=(218, 45, 67)))
+                                        else:
+                                            print(exc_msg)
+                                            await message.reply('', embed=embed(title='',
+                                                                                description=f'⛔  Something went wrong!\n```{exc_msg}```',
+                                                                                color=(218, 45, 67)))
+                            await message.add_reaction('👌')
+                            if result:
+                                await message.reply(result)
+                else:
+                    if isinstance(message.author, discord.Member) and not message.author.premium_since:
+                        msg = message.content
+                        emoji_count = 0
+                        for match in reversed(list(re.finditer(':\w{2,32}:', msg))):
+                            if not (msg[match.start() - 1] == '<' and match.start() > 0) and not (msg[match.start() - 2:match.start()] == '<a' and match.start() > 1):
+                                emoji_name = msg[match.start() + 1:match.end() - 1]
+                                new_emoji = discord.utils.get(message.guild.emojis, name=emoji_name)
+                                if new_emoji:
+                                    new_emoji_text = f'<{"a" if new_emoji.animated else ""}:{new_emoji.name}:{new_emoji.id}>'
+                                    msg = msg[:match.start()] + new_emoji_text + msg[match.end():]
+                                    emoji_count += 1
+                        if emoji_count > 0:
+                            print(f"Converting {emoji_count} emojis for @{message.author} in #{message.channel.name} at [{message.guild.name}]")
+                            try:
+                                webhooks[message.channel.id]
+                            except KeyError:
+                                await self.make_webhook(message.channel)
+                            if message.reference:
+                                if isinstance(message.reference.resolved, discord.Message):
+                                    if "\n" in message.reference.resolved.content:
+                                        reply = "> " + message.reference.resolved.content[:message.reference.resolved.content.find("\n")]
+                                    else:
+                                        reply = "> " + message.reference.resolved.content
+                                    if len(reply) > (2000 - len(msg)):
+                                        reply = reply[:(2000 - len(msg)) - 4] + "..."
+                                    msg = f"{reply}\n{msg}"
+                            files = []
+                            for attachment in message.attachments:
+                                binary = io.BytesIO()
+                                await attachment.save(binary)
+                                binary.seek(0)
+                                files.append(discord.File(binary, filename=attachment.filename,
+                                                            spoiler=attachment.is_spoiler()))
+                            try:
+                                await webhooks[message.channel.id].send(username=message.author.display_name,
+                                                                        avatar_url=message.author.avatar_url,
+                                                                        content=msg,
+                                                                        embeds=message.embeds,
+                                                                        files=files if files else None)
+                            except NotFound:
+                                del webhooks[message.channel.id]
+                                await self.make_webhook(message.channel)
+                                await webhooks[message.channel.id].send(username=message.author.display_name,
+                                                                        avatar_url=message.author.avatar_url,
+                                                                        content=msg,
+                                                                        embeds=message.embeds,
+                                                                        files=files if files else None)
+                            emojis_today += emoji_count
+                            try:
+                                await message.delete()
+                            except:
+                                pass
             except Forbidden:
                 try:
                     await message.reply('', embed=embed(title='⛔  Error!', description=f'The bot doesn\'t have enough permissions to complete the action!', color=(218, 45, 67)))
