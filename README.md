@@ -48,5 +48,4 @@ Keep in mind that you will need the `manage emojis` permission to use this featu
 
 ## Requirements
 - [Python 3.8](https://www.python.org/downloads/)
-   - requests (`pip install requests`)
    - discord.py (`pip install discord.py`)
