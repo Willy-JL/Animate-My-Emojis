@@ -2,8 +2,8 @@ import re
 import os
 import io
 import discord
+import aiohttp
 import datetime
-import requests
 from discord.ext import tasks
 from discord import Forbidden, NotFound, HTTPException
 
@@ -105,7 +105,9 @@ class AnimateMyEmojis(discord.Client):
                                                 warned_static_slots = True
                                             continue
                                         file_name = f'{emoji_id}.png'
-                                    r = requests.get(f'https://cdn.discordapp.com/emojis/{file_name}')
+                                    async with aiohttp.ClientSession() as session:
+                                        async with session.get(f'https://cdn.discordapp.com/emojis/{file_name}', allow_redirects=True) as resp:
+                                             r = await resp.read()
                                     try:
                                         new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
                                         result += '<'
@@ -161,7 +163,9 @@ class AnimateMyEmojis(discord.Client):
                                                                                     color=(218, 45, 67)))
                                                 warned_static_slots = True
                                             continue
-                                    r = requests.get(link_emoji)
+                                    async with aiohttp.ClientSession() as session:
+                                        async with session.get(link_emoji, allow_redirects=True) as resp:
+                                           r = await resp.read()
                                     try:
                                         new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
                                         result += '<'
