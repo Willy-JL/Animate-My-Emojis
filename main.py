@@ -107,9 +107,9 @@ class AnimateMyEmojis(discord.Client):
                                         file_name = f'{emoji_id}.png'
                                     async with aiohttp.ClientSession() as session:
                                         async with session.get(f'https://cdn.discordapp.com/emojis/{file_name}', allow_redirects=True) as resp:
-                                             r = await resp.read()
+                                             img = await resp.read()
                                     try:
-                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
+                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=img)
                                         result += '<'
                                         if new_emoji.animated:
                                             result += 'a'
@@ -165,9 +165,9 @@ class AnimateMyEmojis(discord.Client):
                                             continue
                                     async with aiohttp.ClientSession() as session:
                                         async with session.get(link_emoji, allow_redirects=True) as resp:
-                                           r = await resp.read()
+                                           img = await resp.read()
                                     try:
-                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=r.content)
+                                        new_emoji = await message.guild.create_custom_emoji(name=emoji_name, image=img)
                                         result += '<'
                                         if new_emoji.animated:
                                             result += 'a'
