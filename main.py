@@ -255,15 +255,14 @@ class AnimateMyEmojis(discord.Client):
                                 await message.delete()
                             except:
                                 pass
-                            if isinstance(webhook_msg, discord.WebhookMessage):
-                                await webhook_msg.add_reaction("🚫")
-                                try:
-                                    await client.wait_for('reaction_add',
-                                                          timeout=300,
-                                                          check=lambda reaction, user: user.id == author_id and str(reaction.emoji) == "🚫")
-                                    await webhook_msg.delete()
-                                except asyncio.TimeoutError:
-                                    await webhook_msg.clear_reaction("🚫")
+                            await webhook_msg.add_reaction("🚫")
+                            try:
+                                await client.wait_for('reaction_add',
+                                                      timeout=300,
+                                                      check=lambda reaction, user: user.id == author_id and str(reaction.emoji) == "🚫")
+                                await webhook_msg.delete()
+                            except asyncio.TimeoutError:
+                                await webhook_msg.clear_reaction("🚫")
         except Forbidden:
             try:
                 await message.reply(embed=embed(title="⛔  Error!", description="The bot doesn't have enough permissions to complete the action!", color=(218, 45, 67)))
