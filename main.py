@@ -2,6 +2,7 @@ from discord import Forbidden, NotFound, HTTPException
 from discord.ext import tasks
 import datetime
 import discord
+import asyncio
 import aiohttp
 import re
 import os
@@ -51,9 +52,9 @@ class AnimateMyEmojis(discord.Client):
             only_ping        = message.content     ==     f"<@!{self.user.id}>"  or message.content     ==     f"<@{self.user.id}>"
             starts_with_ping = message.content.startswith(f"<@!{self.user.id}>") or message.content.startswith(f"<@{self.user.id}>")
             if only_ping:
-                await message.reply(embed=embed(title="📩  Invite me to your server!",
+                await message.reply(embed=embed(title="😎 AnimateMyEmojis",
                                                 description="You can **invite me** to __your__ server with __**[this link](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot)**__!\n"
-                                                            "My source code is available __**[here](https://github.com/Willy-JL/animate-my-emojis)**__!\n"
+                                                            "__**[Here](https://github.com/Willy-JL/animate-my-emojis)**__ you can find more info *and* my source code!\n"
                                                             "\n"
                                                             "Made with 💙 by [WillyJL](https://linktr.ee/WillyJL)",
                                                 color=(93, 173, 236)))
@@ -230,27 +231,39 @@ class AnimateMyEmojis(discord.Client):
                             fp.seek(0)
                             files.append(discord.File(fp, filename=attachment.filename,
                                                       spoiler=attachment.is_spoiler()))
+                        webhook_msg = None
                         try:
-                            await webhook_cache[message.channel.id].send(username=message.author.display_name,
-                                                                         avatar_url=message.author.avatar_url,
-                                                                         content=msg,
-                                                                         embeds=message.embeds,
-                                                                         files=files,
-                                                                         wait=True)
+                            webhook_msg = await webhook_cache[message.channel.id].send(username=message.author.display_name,
+                                                                                       avatar_url=message.author.avatar_url,
+                                                                                       content=msg,
+                                                                                       embeds=message.embeds,
+                                                                                       files=files,
+                                                                                       wait=True)
                         except NotFound:
                             del webhook_cache[message.channel.id]
                             await self.ensure_webhook(message.channel)
-                            await webhook_cache[message.channel.id].send(username=message.author.display_name,
-                                                                         avatar_url=message.author.avatar_url,
-                                                                         content=msg,
-                                                                         embeds=message.embeds,
-                                                                         files=files,
-                                                                         wait=True)
-                        emojis_today += emoji_count
-                        try:
-                            await message.delete()
-                        except:
-                            pass
+                            webhook_msg = await webhook_cache[message.channel.id].send(username=message.author.display_name,
+                                                                                       avatar_url=message.author.avatar_url,
+                                                                                       content=msg,
+                                                                                       embeds=message.embeds,
+                                                                                       files=files,
+                                                                                       wait=True)
+                        if webhook_msg:
+                            emojis_today += emoji_count
+                            author_id = message.author.id
+                            try:
+                                await message.delete()
+                            except:
+                                pass
+                            if isinstance(webhook_msg, discord.WebhookMessage):
+                                await webhook_msg.add_reaction("🚫")
+                                try:
+                                    await client.wait_for('reaction_add',
+                                                          timeout=300,
+                                                          check=lambda reaction, user: user.id == author_id and str(reaction.emoji) == "🚫")
+                                    await webhook_msg.delete()
+                                except asyncio.TimeoutError:
+                                    await webhook_msg.clear_reaction("🚫")
         except Forbidden:
             try:
                 await message.reply(embed=embed(title="⛔  Error!", description="The bot doesn't have enough permissions to complete the action!", color=(218, 45, 67)))

@@ -9,6 +9,7 @@ Code behind [`AnimateMyEmojis#7240`](https://discord.com/oauth2/authorize?client
 
   Example: `I'm so hyped for tomorrow's release :aPES_PogHype:`
 - The bot will then delete your message and send it again using a custom webhook with all the emojis converted and animated
+- The replaced message will have a 🚫 reaction under it, you can use it to delete the message (timeout of 5 minutes)
 
 ### Server Staff
 - [Invite](https://discord.com/oauth2/authorize?client_id=812756332905365504&permissions=1610689600&scope=bot) the bot to your server
