@@ -259,7 +259,7 @@ class AnimateMyEmojis(discord.Client):
                             try:
                                 await client.wait_for('reaction_add',
                                                       timeout=300,
-                                                      check=lambda reaction, user: user.id == author_id and str(reaction.emoji) == "🚫")
+                                                      check=lambda reaction, user: reaction.message.id == webhook_msg.id and user.id == author_id and str(reaction.emoji) == "🚫")
                                 await webhook_msg.delete()
                             except asyncio.TimeoutError:
                                 await webhook_msg.clear_reaction("🚫")
